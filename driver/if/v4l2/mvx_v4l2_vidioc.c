@@ -110,6 +110,13 @@ static int to_v4l2_format(struct v4l2_format *f,
             memset(p->plane_fmt[i].reserved, 0,
                    sizeof(p->plane_fmt[i].reserved));
         }
+        if (mvx_v4l2_is_single_plane(pix->pixelformat)) {
+            for (i = 1; i < pix->num_planes; i++) {
+                p->plane_fmt[0].sizeimage += size[i];
+                memset(&p->plane_fmt[i], 0, sizeof(p->plane_fmt[i]));
+            }
+            p->num_planes = 1;
+        }
 
         break;
     }
@@ -177,6 +184,19 @@ static int from_v4l2_format(struct mvx_v4l2_session *vsession,
             size[i] = p->plane_fmt[i].sizeimage;
             stride[i] = p->plane_fmt[i].bytesperline;
             vsession->session.setting_stride[i] = stride[i];
+        }
+        if (mvx_v4l2_is_single_plane(p->pixelformat)) {
+            /*
+             * One plane: its bytesperline is the luma's, the chroma's
+             * follows from it (half, for the three-plane YUV420).
+             */
+            size[0] = 0;
+            for (i = 1; i < MVX_BUFFER_NPLANES; i++) {
+                size[i] = 0;
+                stride[i] = p->pixelformat == V4L2_PIX_FMT_YUV420 ?
+                    stride[0] / 2 : stride[0];
+                vsession->session.setting_stride[i] = stride[i];
+            }
         }
 
         break;
@@ -360,6 +380,14 @@ static int queue_setup(struct vb2_queue *q,
         alloc_devs[i] = session->dev;
     }
 
+    if (mvx_v4l2_is_single_plane(port->pixelformat)) {
+        for (i = 1; i < port->nplanes; ++i) {
+            plane_size[0] += plane_size[i];
+            plane_size[i] = 0;
+        }
+        *plane_cnt = 1;
+    }
+
     MVX_SESSION_VERBOSE(session,
                 "queue_setup. vsession=%px, vport=%px, vb2_queue=%px, dir=%d, format=0x%x, width=%u, height=%u, nplanes=%u, plane_size=[%u, %u, %u]",
                 vsession, vport, q, vport->dir, port->format,
@@ -413,6 +441,14 @@ static int buf_init(struct vb2_buffer *b)
                      b, i);
             return -ENOMEM;
         }
+    }
+
+    /* One plane holding the MVX buffer's: each maps all of it. */
+    if (mvx_v4l2_is_single_plane(session->port[vport->dir].pixelformat)) {
+        for (i = 1; i < session->port[vport->dir].nplanes; ++i)
+            sgt[i] = sgt[0];
+        return mvx_v4l2_buffer_construct(vbuf, vsession, vport->dir,
+                    session->port[vport->dir].nplanes, sgt);
     }
 
     ret = mvx_v4l2_buffer_construct(vbuf, vsession, vport->dir,

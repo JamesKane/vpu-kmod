@@ -164,4 +164,10 @@ void mvx_v4l2_buffer_get(struct mvx_v4l2_buffer *vbuf,
  */
 enum vb2_buffer_state mvx_v4l2_buffer_update(struct mvx_v4l2_buffer *vbuf);
 
+/**
+ * mvx_v4l2_is_single_plane() - A pixel format V4L2 gives one plane and the
+ * driver several, presented as one plane holding them all.
+ */
+bool mvx_v4l2_is_single_plane(unsigned int pixelformat);
+
 #endif /* _MVX_V4L2_BUFFER_H_ */

@@ -308,14 +308,69 @@ static int update_mvx_flags(struct mvx_buffer *buf,
     return 0;
 }
 
+bool mvx_v4l2_is_single_plane(unsigned int pixelformat)
+{
+#ifdef __FreeBSD__
+    /*
+     * V4L2 defines these as one plane, the chroma following the luma
+     * (their 'M' variants have a plane each); the driver gives them a plane
+     * each.  FFmpeg fills them as V4L2 does: present one, holding all.
+     */
+    return pixelformat == V4L2_PIX_FMT_YUV420 ||
+           pixelformat == V4L2_PIX_FMT_NV12 ||
+           pixelformat == V4L2_PIX_FMT_NV21 ||
+           pixelformat == V4L2_PIX_FMT_P010;
+#else
+    return false;
+#endif
+}
+
 static bool is_contiguous_planes(unsigned int pixelformat, int memory)
 {
+    if (mvx_v4l2_is_single_plane(pixelformat))
+        return true;
     return (memory != V4L2_MEMORY_MMAP) &&
            (pixelformat == V4L2_PIX_FMT_YUV420 ||
             pixelformat == V4L2_PIX_FMT_NV12 ||
             pixelformat == V4L2_PIX_FMT_NV21 ||
             pixelformat == V4L2_PIX_FMT_P010);
 }
+
+#ifdef __FreeBSD__
+/*
+ * A single V4L2 plane holding the MVX buffer's planes, one after the other:
+ * spread its bytes and offset over them.
+ */
+static int update_mvx_single_plane(struct mvx_v4l2_buffer *vbuf,
+                   unsigned int *size)
+{
+    struct vb2_buffer *vb2 = to_vb2_buf(vbuf);
+    struct mvx_buffer *mvx_buf = &vbuf->buf;
+    unsigned int offset = vb2->planes[0].data_offset;
+    unsigned int used, length, n;
+    int i;
+    int ret;
+
+    if (vb2->memory == V4L2_MEMORY_MMAP)
+        offset += vb2->planes[0].m.offset & ~PAGE_MASK;
+    used = vb2->planes[0].bytesused > offset ?
+        vb2->planes[0].bytesused - offset : 0;
+    length = vb2->planes[0].length > offset ?
+        vb2->planes[0].length - offset : 0;
+
+    for (i = 0; i < mvx_buf->nplanes; i++) {
+        n = min(used, size[i]);
+        ret = mvx_buffer_filled_set(mvx_buf, i, n, offset);
+        if (ret != 0)
+            return ret;
+        mvx_buf->planes[i].length = length;
+        used -= n;
+        length -= min(length, size[i]);
+    }
+
+    return 0;
+}
+#endif
 
 /* Update mvx_buffer from mvx_v4l2_buffer */
 static int update_mvx_buffer(struct mvx_v4l2_buffer *vbuf)
@@ -327,8 +382,9 @@ static int update_mvx_buffer(struct mvx_v4l2_buffer *vbuf)
     int i;
     int ret;
 
-    if ((!session->dual_afbc_downscaled && vb2->num_planes != mvx_buf->nplanes) ||
-        (session->dual_afbc_downscaled && vb2->num_planes > mvx_buf->nplanes)) {
+    if (!mvx_v4l2_is_single_plane(vport->port->pixelformat) &&
+        ((!session->dual_afbc_downscaled && vb2->num_planes != mvx_buf->nplanes) ||
+        (session->dual_afbc_downscaled && vb2->num_planes > mvx_buf->nplanes))) {
         MVX_LOG_PRINT(&mvx_log_if, MVX_LOG_WARNING,
                   "VB2 and MVX buffers have different number of planes. vb2_planes=%u, mvx_planes=%u.",
                   vb2->num_planes, mvx_buf->nplanes);
@@ -348,6 +404,16 @@ static int update_mvx_buffer(struct mvx_v4l2_buffer *vbuf)
 
     mvx_buf->is_contiguous =
         is_contiguous_planes(vport->port->pixelformat, vb2->memory);
+
+#ifdef __FreeBSD__
+    if (mvx_v4l2_is_single_plane(vport->port->pixelformat)) {
+        ret = update_mvx_single_plane(vbuf, vport->port->size);
+        if (ret != 0)
+            return ret;
+        update_mvx_flags(mvx_buf, vb2);
+        return 0;
+    }
+#endif
 
     for (i = 0; i < vb2->num_planes; i++) {
         unsigned int offset = vb2->planes[i].data_offset;
@@ -385,8 +451,9 @@ static int update_v4l2_bytesused(struct mvx_v4l2_buffer *vbuf)
     struct mvx_session *session = &vport->vsession->session;
     int i;
 
-    if ((!session->dual_afbc_downscaled && b->num_planes != buf->nplanes) ||
-        (session->dual_afbc_downscaled && b->num_planes > buf->nplanes)) {
+    if (!mvx_v4l2_is_single_plane(vport->port->pixelformat) &&
+        ((!session->dual_afbc_downscaled && b->num_planes != buf->nplanes) ||
+        (session->dual_afbc_downscaled && b->num_planes > buf->nplanes))) {
         MVX_LOG_PRINT(&mvx_log_if, MVX_LOG_WARNING,
                   "VB2 and MVX buffers have different number of planes. vb2_planes=%u, mvx_planes=%u.",
                   b->num_planes, buf->nplanes);
@@ -400,6 +467,16 @@ static int update_v4l2_bytesused(struct mvx_v4l2_buffer *vbuf)
      * V4L2 bytesused is the total length including the offset.
      * bytesused should be <= length and bytesused >= offset.
      */
+
+#ifdef __FreeBSD__
+    if (mvx_v4l2_is_single_plane(vport->port->pixelformat)) {
+        b->planes[0].bytesused = buf->planes[0].offset;
+        for (i = 0; i < buf->nplanes; i++)
+            b->planes[0].bytesused += buf->planes[i].filled;
+        b->planes[0].data_offset = buf->planes[0].offset;
+        return 0;
+    }
+#endif
 
     for (i = 0; i < b->num_planes; i++) {
         b->planes[i].bytesused =
