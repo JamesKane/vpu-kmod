@@ -124,8 +124,13 @@ int __v4l2_device_register_subdev(struct v4l2_device *v4l2_dev,
 	 * devices that also register sub-devices, do not
 	 * try_module_get() such sub-device owners.
 	 */
+#ifdef __FreeBSD__
+	/* LinuxKPI's drivers have no owner, and module references are moot. */
+	sd->owner_v4l2_dev = false;
+#else
 	sd->owner_v4l2_dev = v4l2_dev->dev && v4l2_dev->dev->driver &&
 		module == v4l2_dev->dev->driver->owner;
+#endif
 
 	if (!sd->owner_v4l2_dev && !try_module_get(module))
 		return -ENODEV;

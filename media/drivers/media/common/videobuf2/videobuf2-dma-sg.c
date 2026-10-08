@@ -23,7 +23,13 @@
 #include <media/videobuf2-dma-sg.h>
 
 static int debug;
+#ifdef __FreeBSD__
+/* One sysctl each (hw.lkpi_v4l2.vb2_dma_sg_debug), not three called debug. */
+module_param_named(vb2_dma_sg_debug, debug, int, 0644);
+MODULE_PARM_DESC(vb2_dma_sg_debug, "videobuf2 scatter-gather debug level");
+#else
 module_param(debug, int, 0644);
+#endif
 
 #define dprintk(level, fmt, arg...)					\
 	do {								\
@@ -329,6 +335,46 @@ static unsigned int vb2_dma_sg_num_users(void *buf_priv)
 	return refcount_read(&buf->refcount);
 }
 
+#ifdef __FreeBSD__
+/*
+ * LinuxKPI maps a device's pages through a fault handler (or one
+ * contiguous range), not vm_map_pages(): insert the faulting page.
+ */
+static vm_fault_t vb2_dma_sg_fbsd_fault(struct vm_fault *vmf)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	struct vb2_vmarea_handler *h = vma->vm_private_data;
+	struct vb2_dma_sg_buf *buf = h->arg;
+	unsigned long pidx = vmf->pgoff - vma->vm_pgoff;
+	vm_fault_t ret;
+
+	if (pidx >= buf->num_pages)
+		return VM_FAULT_SIGBUS;
+	VM_OBJECT_WLOCK(vma->vm_obj);
+	ret = lkpi_vmf_insert_pfn_prot_locked(vma,
+	    vma->vm_start + (pidx << PAGE_SHIFT),
+	    page_to_pfn(buf->pages[pidx]), vma->vm_page_prot);
+	VM_OBJECT_WUNLOCK(vma->vm_obj);
+	return ret;
+}
+
+static void vb2_dma_sg_fbsd_open(struct vm_area_struct *vma)
+{
+	vb2_common_vm_ops.open(vma);
+}
+
+static void vb2_dma_sg_fbsd_close(struct vm_area_struct *vma)
+{
+	vb2_common_vm_ops.close(vma);
+}
+
+static const struct vm_operations_struct vb2_dma_sg_fbsd_vm_ops = {
+	.open = vb2_dma_sg_fbsd_open,
+	.close = vb2_dma_sg_fbsd_close,
+	.fault = vb2_dma_sg_fbsd_fault,
+};
+#endif
+
 static int vb2_dma_sg_mmap(void *buf_priv, struct vm_area_struct *vma)
 {
 	struct vb2_dma_sg_buf *buf = buf_priv;
@@ -339,6 +385,13 @@ static int vb2_dma_sg_mmap(void *buf_priv, struct vm_area_struct *vma)
 		return -EINVAL;
 	}
 
+#ifdef __FreeBSD__
+	(void)err;
+	if (vma_pages(vma) > buf->num_pages)
+		return -EINVAL;
+	vma->vm_private_data	= &buf->handler;
+	vma->vm_ops		= &vb2_dma_sg_fbsd_vm_ops;
+#else
 	err = vm_map_pages(vma, buf->pages, buf->num_pages);
 	if (err) {
 		printk(KERN_ERR "Remapping memory, error: %d\n", err);
@@ -350,6 +403,7 @@ static int vb2_dma_sg_mmap(void *buf_priv, struct vm_area_struct *vma)
 	 */
 	vma->vm_private_data	= &buf->handler;
 	vma->vm_ops		= &vb2_common_vm_ops;
+#endif
 
 	vma->vm_ops->open(vma);
 

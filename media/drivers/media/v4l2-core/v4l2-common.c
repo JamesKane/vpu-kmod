@@ -741,6 +741,11 @@ struct clk *__devm_v4l2_sensor_clk_get(struct device *dev, const char *id,
 				       bool legacy, bool fixed_rate,
 				       unsigned long clk_rate)
 {
+#ifdef __FreeBSD__
+	/* A camera sensor's clock, from its firmware node: none here. */
+	return ERR_PTR(-ENODEV);
+}
+#else
 	bool of_node = is_of_node(dev_fwnode(dev));
 	const char *clk_id __free(kfree) = NULL;
 	struct clk_hw *clk_hw;
@@ -805,4 +810,5 @@ struct clk *__devm_v4l2_sensor_clk_get(struct device *dev, const char *id,
 
 	return clk_hw->clk;
 }
+#endif
 EXPORT_SYMBOL_GPL(__devm_v4l2_sensor_clk_get);

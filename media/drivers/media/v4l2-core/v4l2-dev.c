@@ -229,7 +229,12 @@ static void v4l2_device_release(struct device *cd)
 		v4l2_device_put(v4l2_dev);
 }
 
+#ifdef __FreeBSD__
+/* LinuxKPI's class_register() takes no const class. */
+static struct class video_class = {
+#else
 static const struct class video_class = {
+#endif
 	.name = VIDEO_NAME,
 	.dev_groups = video_device_groups,
 };
@@ -486,7 +491,9 @@ static const struct file_operations v4l2_fops = {
 	.read = v4l2_read,
 	.write = v4l2_write,
 	.open = v4l2_open,
+#ifndef __FreeBSD__
 	.get_unmapped_area = v4l2_get_unmapped_area,
+#endif
 	.mmap = v4l2_mmap,
 	.unlocked_ioctl = v4l2_ioctl,
 #ifdef CONFIG_COMPAT

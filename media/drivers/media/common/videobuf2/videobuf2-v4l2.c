@@ -34,7 +34,13 @@
 #include <media/videobuf2-v4l2.h>
 
 static int debug;
+#ifdef __FreeBSD__
+/* One sysctl each (hw.lkpi_v4l2.vb2_v4l2_debug), not three called debug. */
+module_param_named(vb2_v4l2_debug, debug, int, 0644);
+MODULE_PARM_DESC(vb2_v4l2_debug, "videobuf2 V4L2 debug level");
+#else
 module_param(debug, int, 0644);
+#endif
 
 #define dprintk(q, level, fmt, arg...)					      \
 	do {								      \

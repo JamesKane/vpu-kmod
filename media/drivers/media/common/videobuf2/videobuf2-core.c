@@ -42,7 +42,13 @@
 #endif
 
 static int debug;
+#ifdef __FreeBSD__
+/* One sysctl each (hw.lkpi_v4l2.vb2_core_debug), not three called debug. */
+module_param_named(vb2_core_debug, debug, int, 0644);
+MODULE_PARM_DESC(vb2_core_debug, "videobuf2 core debug level");
+#else
 module_param(debug, int, 0644);
+#endif
 
 #define dprintk(q, level, fmt, arg...)					\
 	do {								\
