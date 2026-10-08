@@ -88,13 +88,20 @@ static struct mvx_log_drain mvx_fbsd_drain = {
 	.reset = mvx_fbsd_reset,
 };
 
+/* A group, at its default severity or the tunable hw.amvx.log.<name>'s. */
 static void
-mvx_fbsd_group(struct mvx_log_group *group, const char *tag,
+mvx_fbsd_group(struct mvx_log_group *group, const char *name, const char *tag,
     enum mvx_log_severity severity)
 {
+	char tunable[32];
+	u_int sev;
+
 	memset(group, 0, sizeof(*group));
 	group->tag = tag;
-	group->severity = severity;
+	sev = severity;
+	snprintf(tunable, sizeof(tunable), "hw.amvx.log.%s", name);
+	TUNABLE_INT_FETCH(tunable, &sev);
+	group->severity = sev;
 	group->drain = &mvx_fbsd_drain;
 	mutex_init(&group->mutex);
 }
@@ -102,26 +109,28 @@ mvx_fbsd_group(struct mvx_log_group *group, const char *tag,
 SYSCTL_NODE(_hw_amvx, OID_AUTO, log, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
     "Log severities: 0 panic, 1 error, 2 warning, 3 info, 4 debug, "
     "5 verbose");
-SYSCTL_UINT(_hw_amvx_log, OID_AUTO, if, CTLFLAG_RWTUN,
+/* Not CTLFLAG_TUN: mvx_log_group_init() runs after the sysctls attach. */
+SYSCTL_UINT(_hw_amvx_log, OID_AUTO, if, CTLFLAG_RW,
     &mvx_log_if.severity, 0, "Interface");
-SYSCTL_UINT(_hw_amvx_log, OID_AUTO, fwif, CTLFLAG_RWTUN,
+SYSCTL_UINT(_hw_amvx_log, OID_AUTO, fwif, CTLFLAG_RW,
     &mvx_log_fwif_if.severity, 0, "Firmware interface");
-SYSCTL_UINT(_hw_amvx_log, OID_AUTO, session, CTLFLAG_RWTUN,
+SYSCTL_UINT(_hw_amvx_log, OID_AUTO, session, CTLFLAG_RW,
     &mvx_log_session_if.severity, 0, "Sessions");
-SYSCTL_UINT(_hw_amvx_log, OID_AUTO, dev, CTLFLAG_RWTUN,
+SYSCTL_UINT(_hw_amvx_log, OID_AUTO, dev, CTLFLAG_RW,
     &mvx_log_dev.severity, 0, "Device");
-SYSCTL_UINT(_hw_amvx_log, OID_AUTO, perf, CTLFLAG_RWTUN,
+SYSCTL_UINT(_hw_amvx_log, OID_AUTO, perf, CTLFLAG_RW,
     &mvx_log_perf.severity, 0, "Performance");
 
 int
 mvx_log_group_init(const char *entry_name)
 {
 	/* As mvx_log_group.c's defaults. */
-	mvx_fbsd_group(&mvx_log_if, "MVX if", MVX_LOG_WARNING);
-	mvx_fbsd_group(&mvx_log_fwif_if, "MVX fwif", MVX_LOG_INFO);
-	mvx_fbsd_group(&mvx_log_session_if, "MVX session", MVX_LOG_WARNING);
-	mvx_fbsd_group(&mvx_log_dev, "MVX dev", MVX_LOG_WARNING);
-	mvx_fbsd_group(&mvx_log_perf, "MVX perf", MVX_LOG_INFO);
+	mvx_fbsd_group(&mvx_log_if, "if", "MVX if", MVX_LOG_WARNING);
+	mvx_fbsd_group(&mvx_log_fwif_if, "fwif", "MVX fwif", MVX_LOG_INFO);
+	mvx_fbsd_group(&mvx_log_session_if, "session", "MVX session",
+	    MVX_LOG_WARNING);
+	mvx_fbsd_group(&mvx_log_dev, "dev", "MVX dev", MVX_LOG_WARNING);
+	mvx_fbsd_group(&mvx_log_perf, "perf", "MVX perf", MVX_LOG_INFO);
 	return 0;
 }
 

@@ -14,6 +14,13 @@ int	amvx_fbsd_linux_attach(device_t dev, uint64_t rcsu_pa,
 void	amvx_fbsd_linux_detach(void);
 
 /*
+ * amvx_freebsd_bus.c: repair a core's memories after power-up, as the
+ * driver's core power domains do on Linux.
+ */
+#define	AMVX_FBSD_NCORES	4
+int	amvx_fbsd_core_repair(unsigned int core);
+
+/*
  * amvx_freebsd_bus.c: an integer or integer-array _DSD property of dev, up
  * to nvals of them into vals (which may be NULL): the number it has, or -1
  * if it has none; and the SCMI id of a clock its CLKT names.

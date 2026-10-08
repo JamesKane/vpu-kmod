@@ -136,6 +136,8 @@ int	device_property_read_u32_array(struct device *dev,
 #endif
 /* No generic power domains: the glue powers the codec's cores. */
 #define	dev_pm_domain_detach(dev, power_off)	do { } while (0)
+#include <sys/bus.h>
+#include "amvx_freebsd_bus.h"	/* amvx_fbsd_core_power() */
 
 /* LinuxKPI's struct device has no id: one codec, number 0. */
 #define	MVX_DEV_ID(dev)	0

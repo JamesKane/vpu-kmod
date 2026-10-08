@@ -1414,6 +1414,11 @@ static int mvx_pm_runtime_resume(struct device *dev)
     }
 
     mask = mvx_hwreg_get_core_mask(&ctx->hwreg) << 1;
+#ifdef __FreeBSD__
+    for (i = 1; i <= AMVX_FBSD_NCORES; i++)
+        if (mvx_test_bit(i, &mask))
+            amvx_fbsd_core_repair(i - 1);
+#endif
     for (i = 1; i < ctx->pmdomains_cnt; i++) {
         if (mvx_test_bit(i, &mask)) {
             if (has_acpi_companion(ctx->pmdomains[i])) {

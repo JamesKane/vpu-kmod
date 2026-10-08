@@ -48,9 +48,6 @@
 #include "acpi_if.h"
 #include "amvx_freebsd_bus.h"
 
-/* The codec's cores: power-only ACPI children, each with power resources. */
-#define	AMVX_FBSD_NCORES	4
-
 /* The Sky1's reset controller (ACPI RST0), active low. */
 #define	SKY1_RST_PA		0x16000000UL
 #define	 RST_GROUP1_RCSU	0x804
@@ -163,6 +160,34 @@ amvx_fbsd_power(struct amvx_fbsd_softc *sc, int state)
 	}
 	if (state != ACPI_STATE_D0)
 		(void)acpi_pwr_switch_consumer(h, state);
+	return (0);
+}
+
+/*
+ * Repair a core's memories (its REPR method, as its power resource's _ON).
+ * Its _PR3 keeps that resource on in D3, so switching the core's power
+ * would not repeat it.
+ */
+int
+amvx_fbsd_core_repair(unsigned int core)
+{
+	struct amvx_fbsd_softc *sc = amvx_fbsd_sc;
+	ACPI_HANDLE core_h;
+	ACPI_STATUS st;
+	char name[5];
+
+	if (sc == NULL || core >= AMVX_FBSD_NCORES)
+		return (-ENXIO);
+	snprintf(name, sizeof(name), "CRE%u", core);
+	if (ACPI_FAILURE(AcpiGetHandle(acpi_get_handle(sc->dev), name,
+	    &core_h)))
+		return (-ENOENT);
+	st = AcpiEvaluateObject(core_h, "REPR", NULL, NULL);
+	if (ACPI_FAILURE(st)) {
+		device_printf(sc->dev, "cannot repair %s: %s\n", name,
+		    AcpiFormatException(st));
+		return (-EIO);
+	}
 	return (0);
 }
 
