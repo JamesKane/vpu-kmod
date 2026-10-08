@@ -63,7 +63,7 @@ int mvx_v4l2_open(struct file *file)
     }
 
     MVX_SESSION_INFO(&session->session, "v4l2: Open device. id=%u.",
-             ctx->dev->id);
+             MVX_DEV_ID(ctx->dev));
 
     ret = mvx_v4l2_session_construct(session, ctx);
     if (ret != 0)

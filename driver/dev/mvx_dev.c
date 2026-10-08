@@ -109,6 +109,7 @@ module_param(disable_dfs, bool, 0660);
  * Types
  ****************************************************************************/
 
+#ifndef __FreeBSD__
 #define mvx_to_scmi_pd(pd) container_of(pd, struct mvx_scmi_perf_domain, genpd)
 
 struct mvx_scmi_perf_domain {
@@ -118,6 +119,7 @@ struct mvx_scmi_perf_domain {
     const struct scmi_perf_domain_info *info;
     u32 domain_id;
 };
+#endif
 
 struct mvx_freq_table {
     unsigned int cores;
@@ -126,11 +128,13 @@ struct mvx_freq_table {
     unsigned int cpufreq;
 };
 
+#ifndef __FreeBSD__
 struct mvx_cpufreq_req {
     struct list_head req_list;
     int cpu_id;
     struct freq_qos_request min_freq_req;
 };
+#endif
 
 /**
  * struct mvx_dev_ctx - Private context for the MVx dev device.
@@ -153,7 +157,9 @@ struct mvx_dev_ctx {
 
     struct device *opp_pmdomain;
     struct device_link *opp_dl;
+#ifndef __FreeBSD__
     struct devfreq_dev_profile devfreq_profile;
+#endif
     struct devfreq *devfreq;
     bool devfreq_initialized;
     unsigned long target_freq;
@@ -247,6 +253,21 @@ static unsigned int get_core_mask(struct mvx_client_ops *client)
     return mvx_hwreg_get_core_mask(&ctx->hwreg);
 }
 
+#ifdef __FreeBSD__
+/* No CPU frequency requests: FreeBSD's CPU clocks are powerd's. */
+static int mvx_cpufreq_init(struct mvx_dev_ctx *ctx)
+{
+    return 0;
+}
+
+static void set_min_cpufreq(struct mvx_dev_ctx *ctx, int freq)
+{
+}
+
+static void mvx_cpufreq_remove(struct mvx_dev_ctx *ctx)
+{
+}
+#else
 static int mvx_cpufreq_init(struct mvx_dev_ctx *ctx)
 {
     int ret;
@@ -297,6 +318,8 @@ static void mvx_cpufreq_remove(struct mvx_dev_ctx *ctx)
         kfree(req);
     }
 }
+
+#endif
 
 static int update_freq(struct mvx_dev_ctx *ctx)
 {
@@ -361,11 +384,13 @@ static int update_load(struct mvx_client_session *csession)
     if (ret != 0)
         return ret;
 
+#ifndef __FreeBSD__
     if(!mutex_trylock(&ctx->devfreq->lock))
         return ret;
 
     ret = update_devfreq(ctx->devfreq);
     mutex_unlock(&ctx->devfreq->lock);
+#endif
 
     return ret;
 }
@@ -595,6 +620,18 @@ static irqreturn_t irq_top(int irq,
     return ret;
 }
 
+#ifdef __FreeBSD__
+/* No devfreq: the codec runs at the firmware's clock for now. */
+static int mvx_devfreq_init(struct mvx_dev_ctx *ctx)
+{
+    return 0;
+}
+
+static int mvx_devfreq_remove(struct mvx_dev_ctx *ctx)
+{
+    return 0;
+}
+#else
 static int mvx_scmi_device_set_freq(struct device *dev, unsigned long freq)
 {
     struct generic_pm_domain *genpd = pd_to_genpd(dev->pm_domain);
@@ -852,7 +889,9 @@ static int mvx_devfreq_remove(struct mvx_dev_ctx *ctx)
     return 0;
 }
 
-#ifdef CONFIG_ACPI
+#endif
+
+#if defined(CONFIG_ACPI) && !defined(__FreeBSD__)
 #if VPU_CORE_ACPI_REF_POWERSOURCE
 static void acpi_dev_pm_detach(struct device *dev, bool power_off)
 {
@@ -880,7 +919,7 @@ static int mvx_dev_probe(struct device *dev,
     int ret;
     int i;
     struct device *pd;
-#ifdef CONFIG_ACPI
+#if defined(CONFIG_ACPI) && !defined(__FreeBSD__)
     struct fwnode_handle *child;
 #endif
 
@@ -922,7 +961,7 @@ static int mvx_dev_probe(struct device *dev,
     if (IS_ENABLED(CONFIG_DEBUG_FS)) {
         char name[20];
 
-        scnprintf(name, sizeof(name), "%s%u", MVX_DEV_NAME, dev->id);
+        scnprintf(name, sizeof(name), "%s%u", MVX_DEV_NAME, MVX_DEV_ID(dev));
         ctx->dentry = debugfs_create_dir(name, NULL);
         if (IS_ERR_OR_NULL(ctx->dentry)) {
             ret = -EINVAL;
@@ -962,7 +1001,11 @@ static int mvx_dev_probe(struct device *dev,
     disable_irq(ctx->irq);
 
     if (has_acpi_companion(dev)) {
-#ifdef	CONFIG_ACPI
+#ifdef __FreeBSD__
+        /* The glue powers the cores (their ACPI power resources). */
+        ctx->pmdomains[0] = dev;
+        ctx->pmdomains_cnt = 1;
+#elif defined(CONFIG_ACPI)
         ctx->pmdomains[0] = dev;
         i = 1;
         fwnode_for_each_child_node(dev->fwnode, child) {
@@ -989,7 +1032,9 @@ static int mvx_dev_probe(struct device *dev,
         }
         ctx->pmdomains_cnt = i;
 #endif
-    } else {
+    }
+#ifndef __FreeBSD__
+    else {
         ctx->pmdomains_cnt = of_count_phandle_with_args(dev->of_node, "power-domains", "#power-domain-cells");
         /*Ignore the latest opp_pmdomain which handled by devfreq */
         if (ctx->pmdomains_cnt > 1)
@@ -1009,6 +1054,7 @@ static int mvx_dev_probe(struct device *dev,
             ctx->pmdomains[i] = pd;
         }
     }
+#endif
     pm_runtime_set_autosuspend_delay(ctx->pmdomains[0], 1000);
     pm_runtime_use_autosuspend(ctx->pmdomains[0]);
 
@@ -1057,7 +1103,7 @@ static int mvx_dev_probe(struct device *dev,
               mvx_hwreg_get_ncores(&ctx->hwreg),
               mvx_hwreg_get_core_mask(&ctx->hwreg),
               mvx_hwreg_get_nlsid(&ctx->hwreg),
-              dev->id);
+              MVX_DEV_ID(dev));
 
     complete_all(&ctx->probe_done);
 
@@ -1291,7 +1337,11 @@ static int mvx_pm_runtime_suspend(struct device *dev)
      * hence, do not use cancel_work_sync() to avoid deadlock, and cancle_work()
      * is safe in this case.
      */
+#ifdef __FreeBSD__
+    if (current_work() != NULL)
+#else
     if (current->flags & PF_WQ_WORKER)
+#endif
         cancel_work(&ctx->work);
     else
         cancel_work_sync(&ctx->work);
@@ -1433,6 +1483,7 @@ static const struct dev_pm_ops mvx_dev_pm_ops = {
 };
 #endif /* CONFIG_PM */
 
+#ifndef __FreeBSD__
 static const struct of_device_id mvx_dev_match_table[] = {
     { .compatible = "arm,mali-mve"  },
     { .compatible = "arm,mali-v500" },
@@ -1451,15 +1502,20 @@ static const struct acpi_device_id mvx_dev_acpi_match_table[] = {
     { }
 };
 MODULE_DEVICE_TABLE(acpi, mvx_dev_acpi_match_table);
+#endif
 
 static struct platform_driver mvx_dev_driver = {
     .probe                  = mvx_pdev_probe,
     .remove                 = mvx_pdev_remove,
     .driver                 = {
         .name           = MVX_DEV_NAME,
+#ifndef __FreeBSD__
         .owner          = THIS_MODULE,
+#endif
+#ifndef __FreeBSD__
         .of_match_table = mvx_dev_match_table,
         .acpi_match_table = mvx_dev_acpi_match_table,
+#endif
 #ifdef CONFIG_PM
         .pm             = &mvx_dev_pm_ops
 #endif /* CONFIG_PM */
@@ -1470,6 +1526,7 @@ static struct platform_driver mvx_dev_driver = {
  * PCI driver
  ****************************************************************************/
 
+#ifndef __FreeBSD__
 /* LCOV_EXCL_START */
 static int mvx_pci_probe(struct pci_dev *pdev,
              const struct pci_device_id *id)
@@ -1502,6 +1559,7 @@ static struct pci_driver mvx_pci_driver = {
     .remove   = mvx_pci_remove
 };
 /* LCOV_EXCL_STOP */
+#endif
 
 /****************************************************************************
  * Exported variables and functions
@@ -1517,6 +1575,7 @@ int mvx_dev_init(void)
         return ret;
     }
 
+#ifndef __FreeBSD__
     /* LCOV_EXCL_START */
     ret = pci_register_driver(&mvx_pci_driver);
     if (ret != 0) {
@@ -1525,17 +1584,22 @@ int mvx_dev_init(void)
     }
 
     /* LCOV_EXCL_STOP */
+#endif
 
     return 0;
 
+#ifndef __FreeBSD__
 unregister_driver:
     platform_driver_unregister(&mvx_dev_driver); /* LCOV_EXCL_LINE */
 
     return ret;
+#endif
 }
 
 void mvx_dev_exit(void)
 {
+#ifndef __FreeBSD__
     pci_unregister_driver(&mvx_pci_driver); /* LCOV_EXCL_LINE */
+#endif
     platform_driver_unregister(&mvx_dev_driver);
 }

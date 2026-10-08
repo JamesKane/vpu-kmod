@@ -107,6 +107,12 @@ struct mvx_if_ops *mvx_if_create(struct device *dev,
 
     MVX_LOG_PRINT(&mvx_log_if, MVX_LOG_INFO, "probe");
 
+#ifdef __FreeBSD__
+    /* LinuxKPI keeps the masks itself; it has no dma_parms. */
+    ret = dma_set_mask_and_coherent(dev, mvx_if_dma_mask);
+    if (ret != 0)
+        return ERR_PTR(ret);
+#else
     dev->dma_mask = &mvx_if_dma_mask;
     dev->coherent_dma_mask = mvx_if_dma_mask;
 
@@ -135,6 +141,7 @@ struct mvx_if_ops *mvx_if_create(struct device *dev,
         return ERR_PTR(-ENOMEM);
 
     dma_set_max_seg_size(dev, SZ_2G);
+#endif
 
 #if (KERNEL_VERSION(4, 1, 0) <= LINUX_VERSION_CODE) && IS_ENABLED(CONFIG_OF)
     of_dma_configure_id(dev, dev->of_node, 0, NULL);
@@ -150,7 +157,7 @@ struct mvx_if_ops *mvx_if_create(struct device *dev,
     if (IS_ENABLED(CONFIG_DEBUG_FS)) {
         char name[20];
 
-        scnprintf(name, sizeof(name), "%s%u", MVX_IF_NAME, dev->id);
+        scnprintf(name, sizeof(name), "%s%u", MVX_IF_NAME, MVX_DEV_ID(dev));
         ctx->dentry = debugfs_create_dir(name, NULL);
         if (IS_ERR_OR_NULL(ctx->dentry)) {
             ret = -EINVAL;
@@ -169,7 +176,7 @@ struct mvx_if_ops *mvx_if_create(struct device *dev,
 
     /* Create sysfs entry for the device */
     ret = kobject_init_and_add(&ctx->kobj, &if_ktype,
-                   kernel_kobj, "amvx%u", dev->id);
+                   kernel_kobj, "amvx%u", MVX_DEV_ID(dev));
     if (ret != 0) {
         kobject_put(&ctx->kobj);
         goto remove_debugfs;
@@ -211,7 +218,9 @@ free_ctx:
     devm_kfree(dev, ctx);
 
 free_dma_parms:
+#ifndef __FreeBSD__
     devm_kfree(dev, dev->dma_parms);
+#endif
 
     return ERR_PTR(ret);
 }
@@ -231,11 +240,15 @@ void mvx_if_destroy(struct mvx_if_ops *if_ops)
     if (IS_ENABLED(CONFIG_DEBUG_FS))
         debugfs_remove_recursive(ctx->dentry);
 
+#ifndef __FreeBSD__
     devm_kfree(dev, dev->dma_parms);
+#endif
     devm_kfree(dev, ctx);
 
+#ifndef __FreeBSD__
     dev->dma_mask = NULL;
     dev->coherent_dma_mask = 0;
+#endif
 }
 
 void mvx_if_flush_work(struct mvx_if_ops *if_ops)

@@ -9,6 +9,8 @@
  */
 #ifndef _VPU_FREEBSD_COMPAT_H_
 #define	_VPU_FREEBSD_COMPAT_H_
+/* Not for the FreeBSD bus glue (amvx_freebsd_bus.c), which is FreeBSD's. */
+#ifndef AMVX_FBSD_BUS
 
 /*
  * No Linux headers here: a source file's own pr_fmt must come first.
@@ -90,6 +92,7 @@ struct i2c_client;
 #ifndef I2C_CLIENT_END
 #define	I2C_CLIENT_END	0xfffeU
 #endif
+struct dentry;
 struct fwnode_endpoint {
 	unsigned int port;
 	unsigned int id;
@@ -126,4 +129,5 @@ struct fwnode_endpoint {
 SYSCTL_DECL(_hw_lkpi_v4l2);
 #endif
 
+#endif /* !AMVX_FBSD_BUS */
 #endif /* _VPU_FREEBSD_COMPAT_H_ */

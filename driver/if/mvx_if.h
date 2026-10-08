@@ -40,6 +40,11 @@
 #include <linux/list.h>
 #include "mvx_mmu.h"
 
+/* The device's number (FreeBSD's LinuxKPI device has none). */
+#ifndef MVX_DEV_ID
+#define MVX_DEV_ID(dev) ((dev)->id)
+#endif
+
 /****************************************************************************
  * Defines
  ****************************************************************************/

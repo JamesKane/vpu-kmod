@@ -392,8 +392,14 @@ static void *rpcmem_seq_start(struct seq_file *s,
     if (ret != 0)
         return ERR_PTR(-EINVAL);
 
+#ifdef __FreeBSD__
+    /* LinuxKPI's hash buckets are not hlists: no listing. */
+    (void)fw;
+    return NULL;
+#else
     return mvx_seq_hash_start(fw->dev, fw->rpc_mem, HASH_SIZE(
                       fw->rpc_mem), *pos);
+#endif
 }
 
 static void *rpcmem_seq_next(struct seq_file *s,
@@ -402,7 +408,12 @@ static void *rpcmem_seq_next(struct seq_file *s,
 {
     struct mvx_fw *fw = s->private;
 
+#ifdef __FreeBSD__
+    (void)fw;
+    return NULL;
+#else
     return mvx_seq_hash_next(v, fw->rpc_mem, HASH_SIZE(fw->rpc_mem), pos);
+#endif
 }
 
 static void rpcmem_seq_stop(struct seq_file *s,
