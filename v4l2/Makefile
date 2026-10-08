@@ -25,8 +25,11 @@ SRCS=	v4l2-dev.c \
 	videobuf2-core.c \
 	videobuf2-v4l2.c \
 	videobuf2-dma-sg.c \
+	videobuf2-dma-contig.c \
 	videobuf2-memops.c \
+	v4l2-mem2mem.c \
 	lkpi_v4l2_freebsd.c \
+	lkpi_v4l2_dma.c \
 	lkpi_v4l2_subdev.c
 
 SRCS+=	opt_acpi.h \
@@ -35,6 +38,9 @@ SRCS+=	opt_acpi.h \
 	device_if.h \
 	pci_if.h \
 	vnode_if.h
+
+CFLAGS.videobuf2-dma-contig.c+= -include lkpi_v4l2_dma.h
+CFLAGS.v4l2-mem2mem.c+=	-Wno-unused-const-variable
 
 .include <bsd.kmod.mk>
 
