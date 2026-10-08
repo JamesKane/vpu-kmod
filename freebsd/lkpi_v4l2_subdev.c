@@ -65,6 +65,11 @@ frame_vector_to_pages(struct frame_vector *vec)
 	return -EOPNOTSUPP;
 }
 
+void
+frame_vector_to_pfns(struct frame_vector *vec)
+{
+}
+
 int
 get_vaddr_frames(unsigned long start, unsigned int nr_frames, bool write,
     struct frame_vector *vec)

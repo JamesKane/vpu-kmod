@@ -13,4 +13,18 @@ struct reset_control *devm_reset_control_get(struct device *dev,
 int	reset_control_assert(struct reset_control *rstc);
 int	reset_control_deassert(struct reset_control *rstc);
 int	reset_control_reset(struct reset_control *rstc);
+
+/* Bulk (Iris): resets the glue pulses itself with the clocks. */
+struct reset_control_bulk_data {
+	const char		*id;
+	struct reset_control	*rstc;
+};
+int	devm_reset_control_bulk_get_exclusive(struct device *dev, int num_rstcs,
+	    struct reset_control_bulk_data *rstcs);
+int	reset_control_bulk_reset(int num_rstcs,
+	    struct reset_control_bulk_data *rstcs);
+int	reset_control_bulk_assert(int num_rstcs,
+	    struct reset_control_bulk_data *rstcs);
+int	reset_control_bulk_deassert(int num_rstcs,
+	    struct reset_control_bulk_data *rstcs);
 #endif

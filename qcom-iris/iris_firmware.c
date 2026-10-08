@@ -183,6 +183,7 @@ static int iris_load_fw_to_memory(struct iris_core *core)
 	if (ret)
 		goto err_release_fw;
 
+#ifndef __FreeBSD__
 	if (core->fw.iommu_domain) {
 		ret = iommu_map(core->fw.iommu_domain, IRIS_FW_START_ADDR, mem_phys, res_size,
 				IOMMU_READ | IOMMU_WRITE | IOMMU_PRIV, GFP_KERNEL);
@@ -193,6 +194,7 @@ static int iris_load_fw_to_memory(struct iris_core *core)
 
 		core->fw.mapped_mem_size = res_size;
 	}
+#endif
 
 err_release_fw:
 	release_firmware(firmware);
@@ -247,6 +249,7 @@ int iris_fw_unload(struct iris_core *core)
 	else
 		ret = iris_set_hw_state_no_tz(core, false);
 
+#ifndef __FreeBSD__
 	if (core->fw.mapped_mem_size) {
 		size_t unmapped = iommu_unmap(core->fw.iommu_domain, IRIS_FW_START_ADDR,
 					      core->fw.mapped_mem_size);
@@ -256,6 +259,7 @@ int iris_fw_unload(struct iris_core *core)
 
 		core->fw.mapped_mem_size = 0;
 	}
+#endif
 
 	return ret;
 }
@@ -276,6 +280,11 @@ int iris_fw_init(struct iris_core *core)
 	struct device_node *np;
 	int ret;
 
+#ifdef __FreeBSD__
+	/* No devicetree, no firmware's own IOMMU domain: through TrustZone. */
+	core->use_tz = true;
+	return 0;
+#else
 	np = of_get_child_by_name(core->dev->of_node, "video-firmware");
 	if (!np) {
 		core->use_tz = true;
@@ -324,14 +333,17 @@ err_iommu_free:
 err_unregister:
 	platform_device_unregister(pdev);
 	return ret;
+#endif
 }
 
 void iris_fw_deinit(struct iris_core *core)
 {
+#ifndef __FreeBSD__
 	if (!core->fw.iommu_domain)
 		return;
 
 	iommu_detach_device(core->fw.iommu_domain, &core->fw.pdev->dev);
 	iommu_domain_free(core->fw.iommu_domain);
 	platform_device_unregister(core->fw.pdev);
+#endif
 }

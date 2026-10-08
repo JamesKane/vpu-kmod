@@ -631,7 +631,12 @@ static u32 hfi_yuv420_tp10_calc_y_stride(u32 frame_width, u32 stride_multiple)
 {
 	u32 stride;
 
+#ifdef __FreeBSD__
+	/* Linux's ALIGN() is a mask; LinuxKPI's wants a power of 2. */
+	stride = (frame_width + 191) & ~(u32)191;
+#else
 	stride = ALIGN(frame_width, 192);
+#endif
 	stride = ALIGN(stride * 4 / 3, stride_multiple);
 
 	return stride;
@@ -646,7 +651,12 @@ static u32 hfi_yuv420_tp10_calc_uv_stride(u32 frame_width, u32 stride_multiple)
 {
 	u32 stride;
 
+#ifdef __FreeBSD__
+	/* Linux's ALIGN() is a mask; LinuxKPI's wants a power of 2. */
+	stride = (frame_width + 191) & ~(u32)191;
+#else
 	stride = ALIGN(frame_width, 192);
+#endif
 	stride = ALIGN(stride * 4 / 3, stride_multiple);
 
 	return stride;

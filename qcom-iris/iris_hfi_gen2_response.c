@@ -786,7 +786,11 @@ static int iris_hfi_gen2_handle_image_version_property(struct iris_core *core,
 			fw_version[i] = ' ';
 	}
 	fw_version[i] = '\0';
+#ifdef __FreeBSD__
+	dev_info(core->dev, "firmware version: %s\n", fw_version);
+#else
 	dev_dbg(core->dev, "firmware version: %s\n", fw_version);
+#endif
 
 	return 0;
 }

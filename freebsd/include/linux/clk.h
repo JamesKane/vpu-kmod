@@ -14,4 +14,11 @@ int	clk_prepare_enable(struct clk *clk);
 void	clk_disable_unprepare(struct clk *clk);
 unsigned long clk_get_rate(struct clk *clk);
 int	clk_set_rate(struct clk *clk, unsigned long rate);
+
+/* Bulk: every clock the device has (Iris's glue names them). */
+struct clk_bulk_data {
+	const char	*id;
+	struct clk	*clk;
+};
+int	devm_clk_bulk_get_all(struct device *dev, struct clk_bulk_data **clks);
 #endif

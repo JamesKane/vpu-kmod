@@ -27,6 +27,10 @@ MODULE_LICENSE("GPL");
 
 static bool debug;
 module_param(debug, bool, 0644);
+#ifdef __FreeBSD__
+/* LinuxKPI's module_param() wants a description, in the same file. */
+MODULE_PARM_DESC(debug, "mem2mem debug messages");
+#endif
 
 #define dprintk(fmt, arg...)						\
 	do {								\

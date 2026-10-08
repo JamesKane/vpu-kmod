@@ -91,6 +91,13 @@ int iris_vpu_boot_firmware(struct iris_core *core)
 		count++;
 	}
 
+#ifdef __FreeBSD__
+	if (count >= max_tries || (ctrl_status & CTRL_ERROR_STATUS__M) != 0)
+		dev_err(core->dev, "firmware boot: status %#x after %u polls; "
+		    "queues %#jx, sfr %#jx\n", ctrl_status, count,
+		    (uintmax_t)core->iface_q_table_daddr,
+		    (uintmax_t)core->sfr_daddr);
+#endif
 	if (count >= max_tries) {
 		dev_err(core->dev, "error booting up iris firmware\n");
 		return -ETIME;
