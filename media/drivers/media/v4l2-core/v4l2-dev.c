@@ -1061,6 +1061,10 @@ int __video_register_device(struct video_device *vdev,
 	}
 	vdev->cdev->ops = &v4l2_fops;
 	vdev->cdev->owner = owner;
+#ifdef __FreeBSD__
+	/* LinuxKPI names the /dev node after the cdev, Linux after the device. */
+	kobject_set_name(&vdev->cdev->kobj, "%s%d", name_base, vdev->num);
+#endif
 	ret = cdev_add(vdev->cdev, MKDEV(VIDEO_MAJOR, vdev->minor), 1);
 	if (ret < 0) {
 		pr_err("%s: cdev_add failed\n", __func__);

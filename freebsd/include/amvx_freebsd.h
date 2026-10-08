@@ -32,8 +32,6 @@
 #ifndef KOBJ_ADD
 #define	KOBJ_ADD	0
 #endif
-/* The driver's sysfs object, at the top of LinuxKPI's tree. */
-#define	kernel_kobj	((struct kobject *)NULL)
 
 /* timespec64 is FreeBSD's timespec in LinuxKPI. */
 static inline struct timespec64
