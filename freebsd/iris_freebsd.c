@@ -36,7 +36,8 @@
  *   ("iface", the first Iris enables) brings the controller up with its
  *   power domain and resets, the core clock ("vcodec0_core") the core with
  *   its power domain.  The others are no-ops.
- * - One operating point: the core clock's rate is fixed (533 MHz).
+ * - Operating points: the core clock's levels (240 to 560 MHz), with their
+ *   rails, are qcom_videocc(4)'s.
  * - Bandwidth: any vote raises the codec's path to memory; never lowered.
  * - The SC8280XP's UBWC configuration and firmware memory.
  * - Firmware images (.mbn) loaded through TrustZone, as msm's glue does.
@@ -73,7 +74,6 @@
 #define	IRIS_FBSD_COMPATIBLE	"qcom,sc8280xp-iris"
 #define	IRIS_FBSD_FW_MEM	0x8c600000ul	/* video-region */
 #define	IRIS_FBSD_FW_MEM_SIZE	0x700000ul
-#define	IRIS_FBSD_CORE_HZ	533000000ul
 
 /* Devicetree */
 
@@ -192,7 +192,7 @@ unsigned long
 clk_get_rate(struct clk *clk)
 {
 	return (clk != NULL && clk->kind == IRIS_FBSD_CLK_CORE ?
-	    IRIS_FBSD_CORE_HZ : 0);
+	    iris_fbsd_get_rate() : 0);
 }
 
 int
@@ -287,7 +287,10 @@ dev_pm_genpd_set_hwmode(struct device *dev, bool enable)
 	return (-iris_fbsd_hw_set_hwmode(enable));
 }
 
-/* One operating point: the fixed rate. */
+/*
+ * Operating points: an OPP is a level of the core clock, its rate; the
+ * clock's level brings its rails along (qcom_videocc(4)).
+ */
 
 int
 dev_pm_opp_config_clks_simple(struct device *dev, struct opp_table *opp_table,
@@ -308,19 +311,35 @@ devm_pm_opp_of_add_table(struct device *dev)
 	return (0);
 }
 
-static char iris_fbsd_opp;
+struct dev_pm_opp {
+	unsigned long	hz;
+};
 
+static struct dev_pm_opp iris_fbsd_opps[8];
+
+/* The lowest level at least *freq (Linux's flags 0), or the highest. */
 struct dev_pm_opp *
 devfreq_recommended_opp(struct device *dev, unsigned long *freq, u32 flags)
 {
-	*freq = IRIS_FBSD_CORE_HZ;
-	return ((struct dev_pm_opp *)&iris_fbsd_opp);
+	unsigned long hz;
+	u_int i;
+
+	hz = iris_fbsd_round_rate(*freq);
+	if (hz == 0)
+		return (ERR_PTR(-ENODEV));
+	for (i = 0; i < nitems(iris_fbsd_opps); i++)
+		if (iris_fbsd_opps[i].hz == hz || iris_fbsd_opps[i].hz == 0) {
+			iris_fbsd_opps[i].hz = hz;
+			*freq = hz;
+			return (&iris_fbsd_opps[i]);
+		}
+	return (ERR_PTR(-ENOSPC));
 }
 
 int
 dev_pm_opp_set_opp(struct device *dev, struct dev_pm_opp *opp)
 {
-	return (0);
+	return (-iris_fbsd_set_rate(opp->hz));
 }
 
 /* Interconnect: any bandwidth raises the path to memory. */

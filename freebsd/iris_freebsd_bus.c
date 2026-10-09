@@ -119,6 +119,37 @@ iris_fbsd_hw_set_hwmode(bool hw)
 	    qcom_videocc_hw_set_hwmode(iris_fbsd_sc->vcc, hw));
 }
 
+/* The core clock's level (qcom_videocc(4)), with the rails it needs. */
+int
+iris_fbsd_set_rate(u_long hz)
+{
+	return (iris_fbsd_sc == NULL ? ENXIO :
+	    qcom_videocc_set_rate(iris_fbsd_sc->vcc, hz));
+}
+
+u_long
+iris_fbsd_round_rate(u_long hz)
+{
+	return (iris_fbsd_sc == NULL ? 0 :
+	    qcom_videocc_round_rate(iris_fbsd_sc->vcc, hz));
+}
+
+u_long
+iris_fbsd_get_rate(void)
+{
+	return (iris_fbsd_sc == NULL ? 0 :
+	    qcom_videocc_get_rate(iris_fbsd_sc->vcc));
+}
+
+static int
+iris_fbsd_core_hz_sysctl(SYSCTL_HANDLER_ARGS)
+{
+	u_long hz;
+
+	hz = iris_fbsd_get_rate();
+	return (sysctl_handle_long(oidp, &hz, 0, req));
+}
+
 /*
  * The codec's path to memory (BCM MM1, shared with the display's): to its
  * peak, once.  Nothing aggregates the application processors' votes, so it
@@ -212,6 +243,10 @@ iris_fbsd_attach(device_t dev)
 	}
 	sc->claimed = true;
 	iris_fbsd_sc = sc;
+	SYSCTL_ADD_PROC(device_get_sysctl_ctx(dev),
+	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO, "core_hz",
+	    CTLTYPE_ULONG | CTLFLAG_RD | CTLFLAG_MPSAFE, NULL, 0,
+	    iris_fbsd_core_hz_sysctl, "LU", "The core clock's rate (Hz)");
 	error = -iris_fbsd_linux_attach(dev, IRIS_FBSD_PA, IRIS_FBSD_SIZE,
 	    irq);
 	if (error == 0)
