@@ -48,7 +48,12 @@ dma_mmap_attrs(struct device *dev, struct vm_area_struct *vma,
 	if (vma->vm_pgoff >= pages ||
 	    (len >> PAGE_SHIFT) > pages - vma->vm_pgoff)
 		return (-ENXIO);
-	return (remap_pfn_range(vma, vma->vm_start,
+	/*
+	 * LinuxKPI makes the mapping's VM object after the driver's mmap: here
+	 * the range is only recorded, as io_remap_pfn_range() does, for the
+	 * device pager to fault in.  (remap_pfn_range() needs the object.)
+	 */
+	return (io_remap_pfn_range(vma, vma->vm_start,
 	    (vtophys(cpu_addr) >> PAGE_SHIFT) + vma->vm_pgoff, len,
 	    vma->vm_page_prot));
 }
