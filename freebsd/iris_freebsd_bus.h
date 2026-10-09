@@ -42,7 +42,7 @@ void	iris_fbsd_linux_detach(void);
  * iris_freebsd_bus.c: the codec's power (qcom_videocc(4)): its controller
  * (the power domain, resets and clocks of Iris's power_on_controller), its
  * core (power_on_hw), the core under the codec's control, the core clock's
- * level; and its bandwidth (RPMh), only ever raised.
+ * level; and its bandwidth (RPMh).
  */
 int	iris_fbsd_ctrl_enable(void);
 void	iris_fbsd_ctrl_disable(void);
@@ -52,6 +52,6 @@ int	iris_fbsd_hw_set_hwmode(bool hw);
 int	iris_fbsd_set_rate(u_long hz);
 u_long	iris_fbsd_round_rate(u_long hz);
 u_long	iris_fbsd_get_rate(void);
-int	iris_fbsd_bw_vote(void);
+int	iris_fbsd_bw_vote(bool on);
 
 #endif /* _IRIS_FREEBSD_BUS_H_ */

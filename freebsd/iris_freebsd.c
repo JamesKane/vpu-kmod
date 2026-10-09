@@ -38,7 +38,7 @@
  *   its power domain.  The others are no-ops.
  * - Operating points: the core clock's levels (240 to 560 MHz), with their
  *   rails, are qcom_videocc(4)'s.
- * - Bandwidth: any vote raises the codec's path to memory; never lowered.
+ * - Bandwidth: the codec's path to memory at its peak while Iris asks for any.
  * - The SC8280XP's UBWC configuration and firmware memory.
  * - Firmware images (.mbn) loaded through TrustZone, as msm's glue does.
  */
@@ -342,7 +342,7 @@ dev_pm_opp_set_opp(struct device *dev, struct dev_pm_opp *opp)
 	return (-iris_fbsd_set_rate(opp->hz));
 }
 
-/* Interconnect: any bandwidth raises the path to memory. */
+/* Interconnect: any bandwidth votes the path to memory to its peak. */
 
 int
 devm_of_icc_bulk_get(struct device *dev, int num_paths,
@@ -358,12 +358,14 @@ devm_of_icc_bulk_get(struct device *dev, int num_paths,
 int
 icc_bulk_set_bw(int num_paths, const struct icc_bulk_data *bulk)
 {
+	bool on;
 	int i;
 
+	on = false;
 	for (i = 0; i < num_paths; i++)
 		if (bulk[i].avg_bw != 0 || bulk[i].peak_bw != 0)
-			return (-iris_fbsd_bw_vote());
-	return (0);
+			on = true;
+	return (-iris_fbsd_bw_vote(on));
 }
 
 /* Firmware images, through TrustZone: msm's glue's loader. */

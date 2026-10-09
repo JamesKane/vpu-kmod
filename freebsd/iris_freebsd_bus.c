@@ -87,7 +87,7 @@ struct iris_fbsd_softc {
 	struct qcom_videocc	*vcc;
 	const struct firmware	*fw;
 	bool			claimed;
-	bool			bw_voted;
+	struct qcom_rpmh_req	*mm1;
 };
 
 static struct iris_fbsd_softc *iris_fbsd_sc;
@@ -161,27 +161,27 @@ iris_fbsd_core_hz_sysctl(SYSCTL_HANDLER_ARGS)
 }
 
 /*
- * The codec's path to memory (BCM MM1, shared with the display's): to its
- * peak, once.  Nothing aggregates the application processors' votes, so it
- * is never lowered (see qcom_videocc(4)).
+ * The codec's path to memory (BCM MM1, shared with the display's): its peak
+ * while Iris asks for any bandwidth, none when it asks for none; qcom_rpmh(4)
+ * aggregates it with the others'.
  */
 int
-iris_fbsd_bw_vote(void)
+iris_fbsd_bw_vote(bool on)
 {
+	struct iris_fbsd_softc *sc = iris_fbsd_sc;
 	int error;
 
-	if (iris_fbsd_sc == NULL)
+	if (sc == NULL)
 		return (ENXIO);
-	if (iris_fbsd_sc->bw_voted)
-		return (0);
-	error = qcom_rpmh_bcm_vote("MM1", 0, QCOM_RPMH_BCM_MAX);
-	if (error != 0) {
-		device_printf(iris_fbsd_sc->dev, "no bandwidth vote: %d\n",
-		    error);
-		return (error);
-	}
-	iris_fbsd_sc->bw_voted = true;
-	return (0);
+	error = 0;
+	if (sc->mm1 == NULL)
+		sc->mm1 = qcom_rpmh_req_get("MM1", device_get_nameunit(sc->dev),
+		    &error);
+	if (sc->mm1 != NULL)
+		error = qcom_rpmh_req_bw(sc->mm1, 0, on ? QCOM_RPMH_BCM_MAX : 0);
+	if (error != 0)
+		device_printf(sc->dev, "no bandwidth vote: %d\n", error);
+	return (error);
 }
 
 /* The device */
@@ -218,6 +218,8 @@ iris_fbsd_detach(device_t dev)
 	sc->claimed = false;
 	qcom_videocc_destroy(sc->vcc);
 	sc->vcc = NULL;
+	qcom_rpmh_req_put(sc->mm1);
+	sc->mm1 = NULL;
 	if (sc->fw != NULL)
 		firmware_put(sc->fw, FIRMWARE_UNLOAD);
 	sc->fw = NULL;
