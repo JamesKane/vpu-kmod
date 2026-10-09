@@ -47,6 +47,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/bus.h>
+#include <sys/firmware.h>
 #include <sys/kernel.h>
 #include <sys/module.h>
 
@@ -73,9 +74,18 @@
 static const uint16_t iris_fbsd_sids[] = { 0x2a00, 0x2a07 };
 static const uint16_t iris_fbsd_masks[] = { 0x400, 0x400 };
 
+/*
+ * Iris loads its firmware at the first open, by whoever opens the device;
+ * firmware(9) loads an image only for a privileged caller.  The image is
+ * loaded at attach instead (kld_list, as root) and held, so the driver's
+ * request finds it.  The gen2 image: the SC8280XP's in Radxa's firmware.
+ */
+#define	IRIS_FBSD_FW		"qcom/vpu/vpu20_p4_gen2_s6.mbn"
+
 struct iris_fbsd_softc {
 	device_t		dev;
 	struct qcom_videocc	*vcc;
+	const struct firmware	*fw;
 	bool			claimed;
 	bool			bw_voted;
 };
@@ -208,6 +218,9 @@ iris_fbsd_detach(device_t dev)
 	sc->claimed = false;
 	qcom_videocc_destroy(sc->vcc);
 	sc->vcc = NULL;
+	if (sc->fw != NULL)
+		firmware_put(sc->fw, FIRMWARE_UNLOAD);
+	sc->fw = NULL;
 	return (0);
 }
 
@@ -220,6 +233,8 @@ iris_fbsd_attach(device_t dev)
 	if (iris_fbsd_sc != NULL)
 		return (ENXIO);
 	sc->dev = dev;
+	/* Missing, the driver's own request says so at the first open. */
+	sc->fw = firmware_get_flags(IRIS_FBSD_FW, FIRMWARE_GET_NOWARN);
 	sc->vcc = qcom_videocc_create(dev);
 	if (sc->vcc == NULL) {
 		device_printf(dev, "no clock controller\n");
