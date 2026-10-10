@@ -161,12 +161,12 @@ iris_fbsd_core_hz_sysctl(SYSCTL_HANDLER_ARGS)
 }
 
 /*
- * The codec's path to memory (BCM MM1, shared with the display's): its peak
- * while Iris asks for any bandwidth, none when it asks for none; qcom_rpmh(4)
- * aggregates it with the others'.
+ * The codec's path to memory, "video-mem": BCM MM1 (the display's is MM0),
+ * through the node qnm_video0 (32 bytes, one channel), in kB/s as Iris asks;
+ * qcom_rpmh(4) converts it as Linux's bcm-voter and aggregates it.
  */
 int
-iris_fbsd_bw_vote(bool on)
+iris_fbsd_bw_vote(uint32_t avg_kbps, uint32_t peak_kbps)
 {
 	struct iris_fbsd_softc *sc = iris_fbsd_sc;
 	int error;
@@ -178,7 +178,7 @@ iris_fbsd_bw_vote(bool on)
 		sc->mm1 = qcom_rpmh_req_get("MM1", device_get_nameunit(sc->dev),
 		    &error);
 	if (sc->mm1 != NULL)
-		error = qcom_rpmh_req_bw(sc->mm1, 0, on ? QCOM_RPMH_BCM_MAX : 0);
+		error = qcom_rpmh_req_kbps(sc->mm1, avg_kbps, peak_kbps, 32, 1);
 	if (error != 0)
 		device_printf(sc->dev, "no bandwidth vote: %d\n", error);
 	return (error);

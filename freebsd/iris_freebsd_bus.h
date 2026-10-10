@@ -52,6 +52,6 @@ int	iris_fbsd_hw_set_hwmode(bool hw);
 int	iris_fbsd_set_rate(u_long hz);
 u_long	iris_fbsd_round_rate(u_long hz);
 u_long	iris_fbsd_get_rate(void);
-int	iris_fbsd_bw_vote(bool on);
+int	iris_fbsd_bw_vote(uint32_t avg_kbps, uint32_t peak_kbps);
 
 #endif /* _IRIS_FREEBSD_BUS_H_ */
